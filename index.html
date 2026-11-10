@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I2C Protocol & Timing Simulator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom Dark Tech Theme Scrollbars & Glows */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+        .glow-amber {
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+        }
+        .glow-cyan {
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
+        }
+        .glow-green {
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+        }
+        .bg-grid-pattern {
+            background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 0);
+            background-size: 16px 16px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans flex flex-col antialiased selection:bg-cyan-500 selection:text-slate-900">
+
+    <!-- Top Header -->
+    <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-slate-950 font-bold text-xl shadow-lg shadow-cyan-500/20">
+                    I²C
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-slate-100 leading-none">I²C Bus Protocol Simulator</h1>
+                    <p class="text-xs text-slate-400 mt-1">Interactive Signal & Timing Visualizer (Standard, Fast, High-Speed)</p>
+                </div>
+            </div>
+
+            <!-- Signal Voltage Level Indicators -->
+            <div class="flex items-center gap-6 bg-slate-950/80 border border-slate-800 rounded-lg px-4 py-1.5 text-xs">
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400">SCL (Clock):</span>
+                    <span id="scl-badge" class="px-2 py-0.5 rounded font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">HIGH (1)</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-400">SDA (Data):</span>
+                    <span id="sda-badge" class="px-2 py-0.5 rounded font-mono font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">HIGH (1)</span>
+                </div>
+                <div class="flex items-center gap-2 border-l border-slate-800 pl-4">
+                    <span class="text-slate-400">Bus State:</span>
+                    <span id="bus-state-badge" class="px-2 py-0.5 rounded font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">FREE (IDLE)</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full flex flex-col gap-6">
+
+        <!-- Top Control Bar / Simulation Setup -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Master & Transfer Settings -->
+            <div class="lg:col-col-span-12 lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-4 shadow-xl">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2 text-cyan-400 font-semibold">
+                        <i class="fa-solid fa-microchip"></i>
+                        <span>Master Controls</span>
+                    </div>
+                    <div class="text-xs text-slate-400 flex items-center gap-2">
+                        <span>Speed:</span>
+                        <select id="speed-mode" class="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 focus:outline-none focus:border-cyan-500">
+                            <option value="1000">Standard (100 kbit/s)</option>
+                            <option value="500">Fast Mode (400 kbit/s)</option>
+                            <option value="250">High-Speed (3.4 Mbit/s)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Target Address -->
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Target Slave Address (7-bit Hex)</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-2 text-slate-500 text-xs font-mono">0x</span>
+                            <input type="text" id="target-addr" value="48" maxlength="2" class="w-full bg-slate-950 border border-slate-700 text-cyan-400 font-mono text-sm rounded pl-8 pr-3 py-1.5 focus:outline-none focus:border-cyan-500 uppercase">
+                        </div>
+                        <span id="target-addr-bin" class="text-[10px] text-slate-500 font-mono mt-1 block">Bin: 1001000</span>
+                    </div>
+
+                    <!-- Read/Write Mode -->
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Transfer Direction</label>
+                        <select id="rw-mode" class="w-full bg-slate-950 border border-slate-700 text-slate-200 text-sm rounded px-3 py-1.5 focus:outline-none focus:border-cyan-500">
+                            <option value="WRITE">WRITE (Master -> Slave) [0]</option>
+                            <option value="READ">READ (Slave -> Master) [1]</option>
+                        </select>
+                        <span id="rw-bit-desc" class="text-[10px] text-slate-500 font-mono mt-1 block">8th bit = 0 (Write)</span>
+                    </div>
+
+                    <!-- Data Bytes Input -->
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Data Bytes (Hex, comma separated)</label>
+                        <input type="text" id="data-bytes-input" value="A5, 3C" class="w-full bg-slate-950 border border-slate-700 text-emerald-400 font-mono text-sm rounded px-3 py-1.5 focus:outline-none focus:border-cyan-500 uppercase">
+                        <span class="text-[10px] text-slate-500 mt-1 block">e.g. 0xA5, 0x3C</span>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-800/80">
+                    <button id="btn-start-tx" class="bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs px-4 py-2 rounded-lg flex items-center gap-2 transition shadow-md shadow-cyan-900/30">
+                        <i class="fa-solid fa-play"></i> Run Transaction
+                    </button>
+                    <button id="btn-step" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs px-4 py-2 rounded-lg border border-slate-700 flex items-center gap-2 transition">
+                        <i class="fa-solid fa-forward-step"></i> Step Forward
+                    </button>
+                    <button id="btn-pause" class="bg-slate-800 hover:bg-slate-700 text-amber-400 font-semibold text-xs px-4 py-2 rounded-lg border border-slate-700 flex items-center gap-2 transition" disabled>
+                        <i class="fa-solid fa-pause"></i> Pause
+                    </button>
+                    <button id="btn-reset" class="bg-slate-800 hover:bg-rose-950 hover:text-rose-400 text-slate-300 font-semibold text-xs px-4 py-2 rounded-lg border border-slate-700 flex items-center gap-2 transition">
+                        <i class="fa-solid fa-rotate-left"></i> Reset Bus
+                    </button>
+                </div>
+            </div>
+
+            <!-- Simulated Slave Configuration -->
+            <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-4 shadow-xl">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div class="flex items-center gap-2 text-purple-400 font-semibold">
+                        <i class="fa-solid fa-server"></i>
+                        <span>Slave Device Setup</span>
+                    </div>
+                    <span class="text-[10px] bg-purple-950/60 text-purple-300 border border-purple-800/50 px-2 py-0.5 rounded">Address Match Simulation</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Hardware Slave Address</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-2 text-slate-500 text-xs font-mono">0x</span>
+                            <input type="text" id="slave-hw-addr" value="48" maxlength="2" class="w-full bg-slate-950 border border-slate-700 text-purple-400 font-mono text-sm rounded pl-8 pr-3 py-1.5 focus:outline-none focus:border-purple-500 uppercase">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">Acknowledge (ACK)</label>
+                        <label class="relative inline-flex items-center cursor-pointer mt-1">
+                            <input type="checkbox" id="slave-ack-enable" class="sr-only peer" checked>
+                            <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                            <span class="ml-2 text-xs text-slate-300" id="ack-mode-label">Auto ACK (Pull SDA Low)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-800/80 pt-3">
+                    <label class="flex items-center justify-between text-xs text-slate-400 cursor-pointer">
+                        <span class="flex items-center gap-1.5">
+                            <i class="fa-solid fa-hourglass-half text-amber-400"></i>
+                            Trigger Clock Stretching (Slave holds SCL LOW)
+                        </span>
+                        <input type="checkbox" id="slave-stretch-scl" class="accent-amber-500 rounded">
+                    </label>
+                    <p class="text-[11px] text-slate-500 mt-1">Forces Master to wait when Slave is busy processing byte.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Oscilloscope Waveform Canvas Display -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-2xl flex flex-col gap-3 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-wave-square text-cyan-400"></i>
+                        Real-Time Oscilloscope Waveform (SCL / SDA)
+                    </h2>
+                    <span id="phase-tag" class="text-xs bg-slate-800 text-cyan-300 font-mono px-2.5 py-0.5 rounded-full border border-slate-700">
+                        Phase: IDLE
+                    </span>
+                </div>
+                <div class="flex items-center gap-4 text-xs font-mono">
+                    <span class="flex items-center gap-1 text-amber-400">
+                        <span class="w-3 h-0.5 bg-amber-400 inline-block"></span> SCL
+                    </span>
+                    <span class="flex items-center gap-1 text-cyan-400">
+                        <span class="w-3 h-0.5 bg-cyan-400 inline-block"></span> SDA
+                    </span>
+                    <span class="flex items-center gap-1 text-emerald-400">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span> Sample Point
+                    </span>
+                </div>
+            </div>
+
+            <!-- Canvas Container -->
+            <div class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 bg-grid-pattern relative">
+                <canvas id="waveform-canvas" height="220" class="w-full block"></canvas>
+            </div>
+
+            <!-- Stage Progress Indicator Bar -->
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-2 text-center text-xs font-mono mt-1">
+                <div id="step-idle" class="p-2 rounded border border-slate-800 bg-slate-950/60 text-slate-500">1. IDLE</div>
+                <div id="step-start" class="p-2 rounded border border-slate-800 bg-slate-950/60 text-slate-500">2. START</div>
+                <div id="step-addr" class="p-2 rounded border border-slate-800 bg-slate-950/60 text-slate-500">3. ADDR + R/W</div>
+                <div id="step-addr-ack" class="p-2 rounded border border-slate-800 bg-slate-950/60 text-slate-500">4. ADDR ACK</div>
+                <div id="step-data" class="p-2 rounded border border-slate-800 bg-slate-950/60 text-slate-500">5. DATA BYTE(S)</div>
+                <div id="step-stop" class="p-2 rounded border border-slate-800 bg-slate-950/60 text-slate-500">6. STOP</div>
+            </div>
+        </div>
+
+        <!-- Event Log & Theory / Rules Reference -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+            <!-- Protocol Event Log -->
+            <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-3 shadow-xl h-80">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-cyan-400"></i> Protocol Event Inspector Log
+                    </h3>
+                    <button id="btn-clear-log" class="text-[11px] text-slate-400 hover:text-slate-200 transition">
+                        Clear Log
+                    </button>
+                </div>
+                <div id="protocol-log" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs overflow-y-auto space-y-1.5">
+                    <div class="text-slate-500 italic">[SYSTEM] I2C Simulator Initialized. Bus is in IDLE state (SCL=1, SDA=1).</div>
+                </div>
+            </div>
+
+            <!-- Textbook Core Rules Reference Panel -->
+            <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col gap-3 shadow-xl">
+                <h3 class="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2">
+                    <i class="fa-solid fa-book-bookmark"></i> I²C Textbook Protocol Principles
+                </h3>
+                <div class="space-y-2.5 text-xs text-slate-300 overflow-y-auto pr-1">
+                    <div class="p-2.5 bg-slate-950/60 border border-slate-800 rounded-lg">
+                        <span class="font-bold text-cyan-400 block mb-0.5">1. START & STOP Conditions</span>
+                        <p class="text-slate-400">
+                            <strong>START:</strong> High-to-Low transition on SDA while SCL is High.<br>
+                            <strong>STOP:</strong> Low-to-High transition on SDA while SCL is High.
+                        </p>
+                    </div>
+                    <div class="p-2.5 bg-slate-950/60 border border-slate-800 rounded-lg">
+                        <span class="font-bold text-amber-400 block mb-0.5">2. Data Validity Rule</span>
+                        <p class="text-slate-400">
+                            SDA must remain <strong>STABLE</strong> during the high period of SCL. SDA is only permitted to change when SCL is LOW.
+                        </p>
+                    </div>
+                    <div class="p-2.5 bg-slate-950/60 border border-slate-800 rounded-lg">
+                        <span class="font-bold text-emerald-400 block mb-0.5">3. 9th Clock Pulse & ACK/NACK</span>
+                        <p class="text-slate-400">
+                            Transfers are 8 bits (MSB first). The receiver pulls SDA LOW during the 9th SCL clock pulse to signal <strong>ACK</strong>. Leaving SDA HIGH indicates <strong>NACK</strong>.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 bg-slate-900/40 py-3 text-center text-xs text-slate-500">
+        I2C Bus Protocol Simulation Tool &bull; Visualizing SCL, SDA, Data Validity, & Clock Stretching
+    </footer>
+
+    <!-- Simulator Engine JavaScript -->
+    <script>
+        // --- Simulator State Variables ---
+        let busState = 'IDLE'; // IDLE, START, ADDR, ADDR_ACK, DATA, DATA_ACK, STOP, STRETCH
+        let sclVal = 1;
+        let sdaVal = 1;
+
+        let simulationTimer = null;
+        let isRunning = false;
+        let stepDelay = 1000;
+
+        // Sequence Data
+        let bitStream = []; // Array of objects: { bit: 0|1|'START'|'STOP'|'ACK'|'NACK', type: string, label: string }
+        let currentBitIdx = -1;
+        let historyPoints = []; // Holds plotted points for canvas renderer
+
+        // UI Element References
+        const canvas = document.getElementById('waveform-canvas');
+        const ctx = canvas.getContext('2d');
+        const sclBadge = document.getElementById('scl-badge');
+        const sdaBadge = document.getElementById('sda-badge');
+        const busStateBadge = document.getElementById('bus-state-badge');
+        const phaseTag = document.getElementById('phase-tag');
+        const logBox = document.getElementById('protocol-log');
+
+        const targetAddrInput = document.getElementById('target-addr');
+        const targetAddrBinLabel = document.getElementById('target-addr-bin');
+        const rwModeSelect = document.getElementById('rw-mode');
+        const rwBitDesc = document.getElementById('rw-bit-desc');
+        const dataBytesInput = document.getElementById('data-bytes-input');
+        const speedModeSelect = document.getElementById('speed-mode');
+
+        const slaveHwAddrInput = document.getElementById('slave-hw-addr');
+        const slaveAckEnable = document.getElementById('slave-ack-enable');
+        const ackModeLabel = document.getElementById('ack-mode-label');
+        const slaveStretchScl = document.getElementById('slave-stretch-scl');
+
+        const btnStartTx = document.getElementById('btn-start-tx');
+        const btnStep = document.getElementById('btn-step');
+        const btnPause = document.getElementById('btn-pause');
+        const btnReset = document.getElementById('btn-reset');
+        const btnClearLog = document.getElementById('btn-clear-log');
+
+        // Target Address Input formatting
+        targetAddrInput.addEventListener('input', (e) => {
+            let hex = e.target.value.replace(/[^0-9a-fA-F]/g, '').slice(0, 2);
+            e.target.value = hex;
+            if (hex) {
+                let val = parseInt(hex, 16);
+                let bin = (val & 0x7F).toString(2).padStart(7, '0');
+                targetAddrBinLabel.textContent = `Bin: ${bin}`;
+            }
+        });
+
+        rwModeSelect.addEventListener('change', () => {
+            const isRead = rwModeSelect.value === 'READ';
+            rwBitDesc.textContent = isRead ? '8th bit = 1 (Read)' : '8th bit = 0 (Write)';
+        });
+
+        slaveAckEnable.addEventListener('change', () => {
+            ackModeLabel.textContent = slaveAckEnable.checked ? 'Auto ACK (Pull SDA Low)' : 'NACK Mode (Leave SDA High)';
+        });
+
+        speedModeSelect.addEventListener('change', () => {
+            stepDelay = parseInt(speedModeSelect.value);
+            if (isRunning) {
+                pauseSimulation();
+                startSimulation();
+            }
+        });
+
+        // Initialize Canvas Sizing
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width - 16;
+            canvas.height = 200;
+            drawWaveforms();
+        }
+        window.addEventListener('resize', resizeCanvas);
+
+        // Logging Utility
+        function addLog(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            const div = document.createElement('div');
+            let color = 'text-slate-300';
+            if (type === 'start' || type === 'stop') color = 'text-cyan-400 font-bold';
+            if (type === 'ack') color = 'text-emerald-400';
+            if (type === 'nack') color = 'text-rose-400 font-bold';
+            if (type === 'warn') color = 'text-amber-400';
+
+            div.className = color;
+            div.innerHTML = `<span class="text-slate-600">[${time}]</span> ${msg}`;
+            logBox.appendChild(div);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        btnClearLog.addEventListener('click', () => {
+            logBox.innerHTML = '<div class="text-slate-500 italic">[SYSTEM] Log cleared. Bus IDLE.</div>';
+        });
+
+        // Update Stage Indicators
+        function setStageHighlight(stageId) {
+            const stages = ['step-idle', 'step-start', 'step-addr', 'step-addr-ack', 'step-data', 'step-stop'];
+            stages.forEach(id => {
+                const el = document.getElementById(id);
+                if (id === stageId) {
+                    el.className = 'p-2 rounded border border-cyan-500/50 bg-cyan-950/40 text-cyan-300 font-bold shadow-sm shadow-cyan-900/50';
+                } else {
+                    el.className = 'p-2 rounded border border-slate-800 bg-slate-950/60 text-slate-500';
+                }
+            });
+        }
+
+        // Build Bit sequence from parameters
+        function generateBitStream() {
+            const stream = [];
+            const addrHex = targetAddrInput.value || '48';
+            const addrVal = parseInt(addrHex, 16) & 0x7F;
+            const isRead = rwModeSelect.value === 'READ';
+            const rwBit = isRead ? 1 : 0;
+
+            const slaveHwVal = parseInt(slaveHwAddrInput.value || '48', 16) & 0x7F;
+            const addressMatches = (addrVal === slaveHwVal);
+            const autoAck = slaveAckEnable.checked;
+
+            // 1. START Condition
+            stream.push({ type: 'START', label: 'S', scl: 1, sda: 0, stage: 'step-start', desc: 'START Condition: SDA pulled LOW while SCL is HIGH' });
+
+            // 2. Address 7 Bits (MSB first)
+            const addrBits = (addrVal).toString(2).padStart(7, '0').split('').map(Number);
+            addrBits.forEach((b, i) => {
+                stream.push({ type: 'ADDR_BIT', bit: b, label: `A${6 - i}:${b}`, stage: 'step-addr', desc: `Address Bit ${6 - i} = ${b}` });
+            });
+
+            // 3. R/W Bit (Bit 8)
+            stream.push({ type: 'RW_BIT', bit: rwBit, label: `R/W:${rwBit}`, stage: 'step-addr', desc: `R/W Bit = ${rwBit} (${isRead ? 'Read' : 'Write'})` });
+
+            // 4. Address ACK/NACK (Bit 9)
+            const addrAckVal = (addressMatches && autoAck) ? 0 : 1; // 0 = ACK, 1 = NACK
+            stream.push({ 
+                type: 'ADDR_ACK', 
+                bit: addrAckVal, 
+                label: addrAckVal === 0 ? 'ACK' : 'NACK', 
+                stage: 'step-addr-ack', 
+                isAck: addrAckVal === 0,
+                desc: addrAckVal === 0 ? 'Slave Acknowledged Address (SDA pulled LOW)' : 'No ACK from Slave (SDA remains HIGH)'
+            });
+
+            // Check if clock stretching requested on byte transfer
+            if (slaveStretchScl.checked) {
+                stream.push({ type: 'STRETCH', label: 'WAIT', stage: 'step-data', desc: 'Slave holding SCL LOW (Clock Stretching)...' });
+            }
+
+            // 5. Data Bytes (only if ACKed or forced)
+            if (addrAckVal === 0) {
+                const rawData = dataBytesInput.value.split(',');
+                rawData.forEach((hexStr, byteIdx) => {
+                    const cleanHex = hexStr.replace(/[^0-9a-fA-F]/g, '');
+                    if (!cleanHex) return;
+                    const byteVal = parseInt(cleanHex, 16) & 0xFF;
+                    const bits = byteVal.toString(2).padStart(8, '0').split('').map(Number);
+
+                    bits.forEach((b, i) => {
+                        stream.push({ 
+                            type: 'DATA_BIT', 
+                            bit: b, 
+                            byteNum: byteIdx + 1, 
+                            label: `D${7 - i}:${b}`, 
+                            stage: 'step-data', 
+                            desc: `Byte ${byteIdx + 1} Bit ${7 - i} = ${b}` 
+                        });
+                    });
+
+                    // Data ACK/NACK (Bit 9)
+                    const dataAckVal = autoAck ? 0 : 1;
+                    stream.push({ 
+                        type: 'DATA_ACK', 
+                        bit: dataAckVal, 
+                        label: dataAckVal === 0 ? 'ACK' : 'NACK', 
+                        stage: 'step-data', 
+                        isAck: dataAckVal === 0,
+                        desc: dataAckVal === 0 ? `Byte ${byteIdx + 1} ACK Received` : `Byte ${byteIdx + 1} NACK Received`
+                    });
+                });
+            }
+
+            // 6. STOP Condition
+            stream.push({ type: 'STOP', label: 'P', scl: 1, sda: 1, stage: 'step-stop', desc: 'STOP Condition: SDA transitions LOW to HIGH while SCL is HIGH' });
+
+            return stream;
+        }
+
+        // Execute Next Step in Simulation
+        function stepSimulation() {
+            if (currentBitIdx >= bitStream.length - 1) {
+                pauseSimulation();
+                addLog('Transfer Sequence Complete. Bus Idle.', 'info');
+                busState = 'IDLE';
+                updateBadges(1, 1, 'FREE (IDLE)');
+                setStageHighlight('step-idle');
+                return;
+            }
+
+            currentBitIdx++;
+            const step = bitStream[currentBitIdx];
+            phaseTag.textContent = `Phase: ${step.type} (${step.label})`;
+            setStageHighlight(step.stage);
+
+            if (step.type === 'START') {
+                sclVal = 1;
+                sdaVal = 0;
+                busState = 'BUSY';
+                addLog(`[START] Condition generated by Master (SDA -> LOW while SCL is HIGH)`, 'start');
+                updateBadges(sclVal, sdaVal, 'BUSY (START)');
+            } else if (step.type === 'STOP') {
+                sclVal = 1;
+                sdaVal = 1;
+                busState = 'IDLE';
+                addLog(`[STOP] Condition generated by Master (SDA -> HIGH while SCL is HIGH)`, 'stop');
+                updateBadges(sclVal, sdaVal, 'FREE (IDLE)');
+            } else if (step.type === 'STRETCH') {
+                sclVal = 0;
+                sdaVal = 1;
+                addLog(`[CLOCK STRETCH] Slave holds SCL LOW to pause master`, 'warn');
+                updateBadges(sclVal, sdaVal, 'STRETCHING');
+            } else {
+                // Regular Bit / ACK / NACK transmission cycle
+                sclVal = 1;
+                sdaVal = step.bit;
+                
+                if (step.type === 'ADDR_BIT') {
+                    addLog(`[ADDR] Transmitting ${step.label}`, 'info');
+                } else if (step.type === 'RW_BIT') {
+                    addLog(`[R/W] Bit set to ${step.bit} (${rwModeSelect.value})`, 'info');
+                } else if (step.type === 'ADDR_ACK') {
+                    if (step.isAck) {
+                        addLog(`[ADDR ACK] Slave matched address 0x${targetAddrInput.value} and ACKed (SDA=0)`, 'ack');
+                    } else {
+                        addLog(`[ADDR NACK] Slave did NOT ACK address 0x${targetAddrInput.value} (SDA=1)`, 'nack');
+                    }
+                } else if (step.type === 'DATA_BIT') {
+                    addLog(`[DATA] Transmitting Byte ${step.byteNum} Bit ${step.label}`, 'info');
+                } else if (step.type === 'DATA_ACK') {
+                    if (step.isAck) {
+                        addLog(`[DATA ACK] Receiver ACKed Byte (SDA=0)`, 'ack');
+                    } else {
+                        addLog(`[DATA NACK] Receiver NACKed Byte (SDA=1)`, 'nack');
+                    }
+                }
+                updateBadges(sclVal, sdaVal, 'BUSY');
+            }
+
+            // Push state point for Canvas plot
+            historyPoints.push({
+                scl: sclVal,
+                sda: sdaVal,
+                label: step.label,
+                type: step.type,
+                desc: step.desc
+            });
+
+            drawWaveforms();
+        }
+
+        function updateBadges(scl, sda, bus) {
+            sclBadge.textContent = scl === 1 ? 'HIGH (1)' : 'LOW (0)';
+            sclBadge.className = scl === 1 
+                ? 'px-2 py-0.5 rounded font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30' 
+                : 'px-2 py-0.5 rounded font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700';
+
+            sdaBadge.textContent = sda === 1 ? 'HIGH (1)' : 'LOW (0)';
+            sdaBadge.className = sda === 1 
+                ? 'px-2 py-0.5 rounded font-mono font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' 
+                : 'px-2 py-0.5 rounded font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700';
+
+            busStateBadge.textContent = bus;
+            if (bus.includes('FREE')) {
+                busStateBadge.className = 'px-2 py-0.5 rounded font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+            } else if (bus.includes('STRETCH')) {
+                busStateBadge.className = 'px-2 py-0.5 rounded font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30';
+            } else {
+                busStateBadge.className = 'px-2 py-0.5 rounded font-mono font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30';
+            }
+        }
+
+        function startSimulation() {
+            if (bitStream.length === 0) {
+                bitStream = generateBitStream();
+                currentBitIdx = -1;
+                historyPoints = [];
+                addLog('=== Starting New I2C Transmission Transaction ===', 'start');
+            }
+
+            isRunning = true;
+            btnStartTx.disabled = true;
+            btnPause.disabled = false;
+
+            simulationTimer = setInterval(() => {
+                stepSimulation();
+            }, stepDelay);
+        }
+
+        function pauseSimulation() {
+            isRunning = false;
+            clearInterval(simulationTimer);
+            btnStartTx.disabled = false;
+            btnPause.disabled = true;
+        }
+
+        function resetBus() {
+            pauseSimulation();
+            bitStream = [];
+            currentBitIdx = -1;
+            historyPoints = [];
+            sclVal = 1;
+            sdaVal = 1;
+            busState = 'IDLE';
+            updateBadges(1, 1, 'FREE (IDLE)');
+            setStageHighlight('step-idle');
+            phaseTag.textContent = 'Phase: IDLE';
+            addLog('[RESET] Bus returned to IDLE state (SCL=HIGH, SDA=HIGH)', 'warn');
+            drawWaveforms();
+        }
+
+        // --- Oscilloscope Drawing Function ---
+        function drawWaveforms() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Channel Baselines & Grid
+            const sclYHigh = 35;
+            const sclYLow = 75;
+            const sdaYHigh = 115;
+            const sdaYLow = 155;
+
+            // Draw Background Grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let x = 0; x < w; x += 30) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h);
+            }
+            ctx.stroke();
+
+            // Channel Labels
+            ctx.font = '10px monospace';
+            ctx.fillStyle = '#f59e0b';
+            ctx.fillText('SCL (Clock)', 10, 20);
+            ctx.fillStyle = '#06b6d4';
+            ctx.fillText('SDA (Data)', 10, 105);
+
+            if (historyPoints.length === 0) {
+                // Idle flat line preview
+                ctx.strokeStyle = '#f59e0b';
+                ctx.beginPath(); ctx.moveTo(0, sclYHigh); ctx.lineTo(w, sclYHigh); ctx.stroke();
+                ctx.strokeStyle = '#06b6d4';
+                ctx.beginPath(); ctx.moveTo(0, sdaYHigh); ctx.lineTo(w, sdaYHigh); ctx.stroke();
+                return;
+            }
+
+            const stepWidth = Math.min(45, Math.max(25, (w - 60) / historyPoints.length));
+            const startX = 50;
+
+            // Plot SCL Waveform
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = '#f59e0b';
+            ctx.beginPath();
+            let currX = startX;
+
+            // Start from High
+            ctx.moveTo(0, sclYHigh);
+            ctx.lineTo(startX, sclYHigh);
+
+            historyPoints.forEach((pt, i) => {
+                const x = startX + i * stepWidth;
+                if (pt.type === 'START' || pt.type === 'STOP') {
+                    ctx.lineTo(x + stepWidth, sclYHigh);
+                } else if (pt.type === 'STRETCH') {
+                    ctx.lineTo(x, sclYLow);
+                    ctx.lineTo(x + stepWidth, sclYLow);
+                } else {
+                    // Clock Pulse for data bit: LOW then HIGH then LOW
+                    ctx.lineTo(x, sclYLow);
+                    ctx.lineTo(x + stepWidth * 0.3, sclYLow);
+                    ctx.lineTo(x + stepWidth * 0.3, sclYHigh);
+                    ctx.lineTo(x + stepWidth * 0.7, sclYHigh);
+                    ctx.lineTo(x + stepWidth * 0.7, sclYLow);
+                    ctx.lineTo(x + stepWidth, sclYLow);
+                }
+            });
+            ctx.stroke();
+
+            // Plot SDA Waveform
+            ctx.strokeStyle = '#06b6d4';
+            ctx.beginPath();
+            ctx.moveTo(0, sdaYHigh);
+            ctx.lineTo(startX, sdaYHigh);
+
+            historyPoints.forEach((pt, i) => {
+                const x = startX + i * stepWidth;
+                const nextY = pt.sda === 1 ? sdaYHigh : sdaYLow;
+
+                if (pt.type === 'START') {
+                    ctx.lineTo(x, sdaYHigh);
+                    ctx.lineTo(x + stepWidth * 0.5, sdaYLow);
+                    ctx.lineTo(x + stepWidth, sdaYLow);
+                } else if (pt.type === 'STOP') {
+                    ctx.lineTo(x, sdaYLow);
+                    ctx.lineTo(x + stepWidth * 0.5, sdaYHigh);
+                    ctx.lineTo(x + stepWidth, sdaYHigh);
+                } else {
+                    ctx.lineTo(x, nextY);
+                    ctx.lineTo(x + stepWidth, nextY);
+                }
+            });
+            ctx.stroke();
+
+            // Draw Bit Annotations & Sampling Point Markers
+            historyPoints.forEach((pt, i) => {
+                const x = startX + i * stepWidth + stepWidth / 2;
+
+                // Bit Label
+                ctx.font = '10px monospace';
+                ctx.fillStyle = pt.type.includes('ACK') ? (pt.sda === 0 ? '#10b981' : '#f43f5e') : '#94a3b8';
+                ctx.textAlign = 'center';
+                ctx.fillText(pt.label, x, 185);
+
+                // Sample Point Marker (when SCL is High)
+                if (pt.type !== 'START' && pt.type !== 'STOP' && pt.type !== 'STRETCH') {
+                    ctx.fillStyle = '#10b981';
+                    ctx.beginPath();
+                    ctx.arc(x, sclYHigh, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+        // --- Event Listeners ---
+        btnStartTx.addEventListener('click', () => {
+            if (bitStream.length === 0 || currentBitIdx >= bitStream.length - 1) {
+                resetBus();
+                bitStream = generateBitStream();
+            }
+            startSimulation();
+        });
+
+        btnStep.addEventListener('click', () => {
+            if (isRunning) pauseSimulation();
+            if (bitStream.length === 0 || currentBitIdx >= bitStream.length - 1) {
+                resetBus();
+                bitStream = generateBitStream();
+            }
+            stepSimulation();
+        });
+
+        btnPause.addEventListener('click', pauseSimulation);
+        btnReset.addEventListener('click', resetBus);
+
+        // On Window Load
+        window.onload = () => {
+            resizeCanvas();
+            resetBus();
+        };
+    </script>
+</body>
+</html>
